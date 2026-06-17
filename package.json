@@ -1,0 +1,13 @@
+{
+  "name": "exam-platform",
+  "version": "1.0.0",
+  "description": "Plataforma de Provas com IA",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "seed": "node database/seed.js"
+  }
+}
