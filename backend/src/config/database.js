@@ -123,6 +123,7 @@ async function initDatabase() {
     'ALTER TABLE exams ADD COLUMN codigo_prova VARCHAR(100) NULL',
     'ALTER TABLE exams ADD COLUMN avaliacao VARCHAR(50) NULL',
     'ALTER TABLE exams ADD COLUMN chamada VARCHAR(30) NULL',
+    'ALTER TABLE pdf_uploads ADD COLUMN num_pages INT DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { await p.query(sql); } catch (e) { if (e.errno !== 1060) throw e; }

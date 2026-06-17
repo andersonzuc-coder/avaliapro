@@ -7,6 +7,44 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const diffLabel = { easy: 'Fácil', medium: 'Médio', hard: 'Difícil' };
 const diffBadge  = { easy: 'badge-green', medium: 'badge-yellow', hard: 'badge-red' };
 
+// Quebra itens I. II. III. IV. em linhas separadas
+function fmtQ(text) {
+  if (!text) return text;
+  return text
+    .replace(/ (I{1,4}|IV|VI{0,4}|IX|XI{0,4}|XIV|XV)\. /g, '\n$1. ')
+    .trim();
+}
+
+function shuffleArr(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function buildVersion(questions, versionIdx) {
+  const letters = ['a','b','c','d','e'];
+  const shuffledQs = shuffleArr(questions).map((q, order) => {
+    const correctText = q[`option_${q.correct_answer}`];
+    const pairs = letters.map(l => ({ l, text: q[`option_${l}`] }));
+    const shuffledPairs = shuffleArr(pairs);
+    const newCorrect = letters[shuffledPairs.findIndex(p => p.text === correctText)];
+    return {
+      ...q,
+      question_order: order + 1,
+      option_a: shuffledPairs[0].text,
+      option_b: shuffledPairs[1].text,
+      option_c: shuffledPairs[2].text,
+      option_d: shuffledPairs[3].text,
+      option_e: shuffledPairs[4].text,
+      correct_answer: newCorrect,
+    };
+  });
+  return { label: String.fromCharCode(65 + versionIdx), questions: shuffledQs };
+}
+
 /* ── mini SVG icons ── */
 const Ico = {
   Print:   () => <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
@@ -112,13 +150,13 @@ function LayoutModal({ onClose }) {
 }
 
 /* ── PDF print template (off-screen) ── */
-function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef }) {
+function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef, versionLabel }) {
   const inst = layout.institution || 'AvaliaPro';
 
   return (
     <div ref={pdfRef} style={{
       position: 'relative',
-      width: '794px', background: '#fff', padding: '40px 48px',
+      width: '754px', background: '#fff', padding: '32px 28px',
       fontFamily: "'Arial', 'Helvetica', sans-serif", fontSize: '12px', lineHeight: 1.6, color: '#111',
     }}>
       {/* Header */}
@@ -135,7 +173,14 @@ function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef }) {
 
         {/* Linha: Cód. Prova | Disciplina */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 11.5, marginBottom: 4 }}>
-          <div><span style={{ fontWeight: 700 }}>Cód. Prova: </span>{exam.codigo_prova || '___________'}</div>
+          <div>
+            <span style={{ fontWeight: 700 }}>Cód. Prova: </span>{exam.codigo_prova || '___________'}
+            {versionLabel && (
+              <span style={{ marginLeft: 10, background: '#1e293b', color: '#fff', padding: '1px 8px', borderRadius: 3, fontWeight: 700, fontSize: 10.5, letterSpacing: '.07em' }}>
+                MODELO {versionLabel}
+              </span>
+            )}
+          </div>
           <div><span style={{ fontWeight: 700 }}>Data: </span>{new Date(exam.created_at).toLocaleDateString('pt-BR')}</div>
           <div style={{ gridColumn: '1 / -1' }}><span style={{ fontWeight: 700 }}>Disciplina: </span>{exam.title}</div>
         </div>
@@ -179,7 +224,7 @@ function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef }) {
             }}>
               {String(q.question_order).padStart(2, '0')}
             </div>
-            <div style={{ textAlign: 'justify', flex: 1, fontWeight: 500 }}>{q.question_text}</div>
+            <div style={{ textAlign: 'justify', flex: 1, fontWeight: 500, whiteSpace: 'pre-line' }}>{fmtQ(q.question_text)}</div>
           </div>
           {q.image_path && (
             <div style={{ margin: '8px 0 8px 32px' }}>
@@ -197,20 +242,43 @@ function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef }) {
         </div>
       ))}
 
-      {/* Gabarito — nova página */}
-      <div style={{ pageBreakBefore: 'always', paddingTop: 24 }}>
-        <div style={{ textAlign: 'center', borderBottom: '2px solid #1e293b', paddingBottom: 10, marginBottom: 20 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, textTransform: 'uppercase', letterSpacing: '.08em' }}>Gabarito</div>
-          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{exam.title}</div>
+    </div>
+  );
+}
+
+/* ── Gabarito template separado ── */
+function GabaritoPrintTemplate({ exam, layout, gabRef, versionLabel }) {
+  const inst = layout.institution || 'AvaliaPro';
+  return (
+    <div ref={gabRef} style={{
+      position: 'relative',
+      width: '754px', background: '#fff', padding: '32px 28px',
+      fontFamily: "'Arial','Helvetica',sans-serif", fontSize: '12px', lineHeight: 1.6, color: '#111',
+    }}>
+      {/* Cabeçalho simplificado */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '2px solid #1e293b', paddingBottom: 10, marginBottom: 16 }}>
+        {layout.logo && <img src={layout.logo} alt="Logo" style={{ height: 52, marginRight: 16, objectFit: 'contain' }} crossOrigin="anonymous" />}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase' }}>{inst}</div>
+          {layout.department && <div style={{ fontSize: 11, color: '#4b5563' }}>{layout.department}</div>}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 6 }}>
-          {exam.questions.map(q => (
-            <div key={q.id} style={{ textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: 4, padding: '5px 3px' }}>
-              <div style={{ fontSize: 9, color: '#9ca3af', fontWeight: 600 }}>{String(q.question_order).padStart(2, '0')}</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{q.correct_answer?.toUpperCase()}</div>
-            </div>
-          ))}
+      </div>
+
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontWeight: 700, fontSize: 16, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          Gabarito{versionLabel ? ` — Modelo ${versionLabel}` : ''}
         </div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{exam.title}</div>
+        {exam.avaliacao && <div style={{ fontSize: 11, color: '#6b7280' }}>{exam.avaliacao}{exam.chamada ? ` — ${exam.chamada}` : ''}</div>}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 8 }}>
+        {exam.questions.map(q => (
+          <div key={q.id} style={{ textAlign: 'center', border: '1.5px solid #e5e7eb', borderRadius: 6, padding: '8px 4px' }}>
+            <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 600 }}>{String(q.question_order).padStart(2, '0')}</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{q.correct_answer?.toUpperCase()}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -221,6 +289,7 @@ export default function ExamDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const pdfRef = useRef(null);
+  const gabRef = useRef(null);
   const imgInputRef = useRef(null);
 
   const [exam, setExam] = useState(null);
@@ -231,6 +300,12 @@ export default function ExamDetail() {
   const [showLayoutModal] = useState(false);
   const [layout, setLayout] = useState(loadLayout);
   const [savingPdf, setSavingPdf] = useState(false);
+  const [savingGab, setSavingGab] = useState(false);
+
+  // Versions (shuffled models)
+  const [numVersions, setNumVersions] = useState(1);
+  const [versions, setVersions] = useState([]);
+  const [activeVersion, setActiveVersion] = useState(0);
 
   // Edit state
   const [editingId, setEditingId] = useState(null);
@@ -246,6 +321,16 @@ export default function ExamDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!exam?.questions?.length || numVersions <= 1) {
+      setVersions([]);
+      setActiveVersion(0);
+      return;
+    }
+    setVersions(Array.from({ length: numVersions }, (_, i) => buildVersion(exam.questions, i)));
+    setActiveVersion(0);
+  }, [numVersions, exam]);
+
   const handleDelete = async () => {
     if (!confirm('Deletar esta prova e todas as correções?')) return;
     try { await api.delete(`/exams/${id}`); navigate('/'); }
@@ -257,18 +342,73 @@ export default function ExamDetail() {
     setSavingPdf(true);
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      await html2pdf().set({
-        margin: [10, 8],
-        filename: `${exam.title}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] },
-      }).from(pdfRef.current).save();
+      await html2pdf()
+        .set({
+          margin: [8, 6, 14, 6],
+          filename: `${exam.title}${versionLabel ? ` - Modelo ${versionLabel}` : ''}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        })
+        .from(pdfRef.current)
+        .toPdf()
+        .get('pdf')
+        .then(pdf => {
+          const total = pdf.internal.getNumberOfPages();
+          const W = pdf.internal.pageSize.getWidth();
+          const H = pdf.internal.pageSize.getHeight();
+          for (let i = 1; i <= total; i++) {
+            pdf.setPage(i);
+            // Linha do rodapé
+            pdf.setDrawColor(150, 150, 150);
+            pdf.setLineWidth(0.3);
+            pdf.line(6, H - 10, W - 6, H - 10);
+            // Número de página
+            pdf.setFontSize(8);
+            pdf.setTextColor(120, 120, 120);
+            pdf.text(`Página ${i} de ${total}`, W / 2, H - 6, { align: 'center' });
+          }
+        })
+        .save();
     } catch (e) {
       alert('Erro ao gerar PDF: ' + e.message);
     } finally {
       setSavingPdf(false);
+    }
+  };
+
+  /* Gabarito PDF */
+  const handleSaveGabaritoPdf = async () => {
+    setSavingGab(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf()
+        .set({
+          margin: [8, 6, 14, 6],
+          filename: `Gabarito${versionLabel ? ` Modelo ${versionLabel}` : ''} - ${exam.title}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(gabRef.current)
+        .toPdf()
+        .get('pdf')
+        .then(pdf => {
+          const W = pdf.internal.pageSize.getWidth();
+          const H = pdf.internal.pageSize.getHeight();
+          pdf.setDrawColor(150, 150, 150);
+          pdf.setLineWidth(0.3);
+          pdf.line(6, H - 10, W - 6, H - 10);
+          pdf.setFontSize(8);
+          pdf.setTextColor(120, 120, 120);
+          pdf.text('Gabarito — ' + exam.title, W / 2, H - 6, { align: 'center' });
+        })
+        .save();
+    } catch (e) {
+      alert('Erro ao gerar gabarito: ' + e.message);
+    } finally {
+      setSavingGab(false);
     }
   };
 
@@ -329,11 +469,16 @@ export default function ExamDetail() {
   if (error)   return <div className="page"><div className="alert alert-error">{error}</div></div>;
   if (!exam)   return null;
 
+  const activeQuestions = numVersions > 1 ? (versions[activeVersion]?.questions || exam.questions) : exam.questions;
+  const versionLabel = numVersions > 1 ? (versions[activeVersion]?.label || 'A') : null;
+  const activeExam = { ...exam, questions: activeQuestions };
+
   return (
     <div className="page">
-      {/* off-screen PDF template — overflow:hidden esconde sem tirar do flow */}
+      {/* off-screen PDF templates */}
       <div style={{ overflow: 'hidden', height: 0, position: 'relative' }}>
-        <ExamPrintTemplate exam={exam} layout={layout} pdfRef={pdfRef} />
+        <ExamPrintTemplate exam={activeExam} layout={layout} pdfRef={pdfRef} versionLabel={versionLabel} />
+        <GabaritoPrintTemplate exam={activeExam} layout={layout} gabRef={gabRef} versionLabel={versionLabel} />
       </div>
 
       {/* Header — oculto na impressão */}
@@ -349,22 +494,48 @@ export default function ExamDetail() {
           </p>
         </div>
 
-        <div className="actions-row" style={{ marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+        <div className="actions-row" style={{ marginBottom: numVersions > 1 ? 12 : 20, flexWrap: 'wrap', gap: 8 }}>
           <button className="btn btn-ghost" onClick={() => window.print()}>
             <Ico.Print /> Imprimir
           </button>
           <button className="btn btn-ghost" onClick={handleSavePdf} disabled={savingPdf}>
-            <Ico.Pdf /> {savingPdf ? 'Gerando PDF...' : 'Salvar em PDF'}
+            <Ico.Pdf /> {savingPdf ? 'Gerando PDF...' : 'Salvar Prova PDF'}
+          </button>
+          <button className="btn btn-ghost" onClick={handleSaveGabaritoPdf} disabled={savingGab}>
+            <Ico.Check /> {savingGab ? 'Gerando...' : 'Salvar Gabarito PDF'}
           </button>
           <button className="btn btn-ghost" onClick={() => setShowGabarito(v => !v)}>
             {showGabarito ? <Ico.EyeOff /> : <Ico.Eye />}
             {showGabarito ? 'Ocultar gabarito' : 'Ver gabarito'}
           </button>
           <div className="spacer" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: 'var(--gray-500)', whiteSpace: 'nowrap' }}>Modelos:</span>
+            <select className="form-select" style={{ width: 72, padding: '5px 8px' }}
+              value={numVersions} onChange={e => setNumVersions(Number(e.target.value))}>
+              {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
           <button className="btn btn-danger btn-sm" onClick={handleDelete}>
             <Ico.Trash /> Deletar
           </button>
         </div>
+
+        {numVersions > 1 && (
+          <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '2px solid #e5e7eb' }}>
+            {versions.map((v, i) => (
+              <button key={v.label} onClick={() => setActiveVersion(i)} style={{
+                padding: '7px 22px', fontSize: 14, fontWeight: 600,
+                border: 'none', cursor: 'pointer', borderRadius: '6px 6px 0 0',
+                background: i === activeVersion ? '#1e293b' : '#f1f5f9',
+                color: i === activeVersion ? '#fff' : '#64748b',
+                marginBottom: -2, transition: 'background .15s, color .15s',
+              }}>
+                Prova {v.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Título na impressão */}
@@ -377,9 +548,11 @@ export default function ExamDetail() {
       {/* Gabarito inline */}
       {showGabarito && (
         <div className="card no-print" style={{ marginBottom: 20 }}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Gabarito</h2>
+          <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>
+            Gabarito{versionLabel ? ` — Modelo ${versionLabel}` : ''}
+          </h2>
           <div className="gabarito-grid">
-            {exam.questions.map(q => (
+            {activeQuestions.map(q => (
               <div key={q.id} className="gabarito-item">
                 <div className="gabarito-num">Q{q.question_order}</div>
                 <div className="gabarito-ans">{q.correct_answer?.toUpperCase()}</div>
@@ -391,7 +564,7 @@ export default function ExamDetail() {
 
       {/* Questões */}
       <div>
-        {exam.questions.map(q => (
+        {activeQuestions.map(q => (
           <div key={q.id} className="question-card">
             {editingId === q.id ? (
               /* ── MODO EDIÇÃO ── */
@@ -470,7 +643,7 @@ export default function ExamDetail() {
               <>
                 <div className="question-header">
                   <div className="question-number">{q.question_order}</div>
-                  <div className="question-text">{q.question_text}</div>
+                  <div className="question-text" style={{ whiteSpace: 'pre-line' }}>{fmtQ(q.question_text)}</div>
                   <span className={`badge ${diffBadge[q.difficulty]} difficulty-badge no-print`}>
                     {diffLabel[q.difficulty]}
                   </span>
@@ -507,9 +680,11 @@ export default function ExamDetail() {
 
       {/* Gabarito separado — visível na tela abaixo das questões */}
       <div className="card no-print" style={{ marginTop: 24 }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Gabarito</h2>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>
+          Gabarito{versionLabel ? ` — Modelo ${versionLabel}` : ''}
+        </h2>
         <div className="gabarito-grid">
-          {exam.questions.map(q => (
+          {activeQuestions.map(q => (
             <div key={q.id} className="gabarito-item">
               <div className="gabarito-num">Q{q.question_order}</div>
               <div className="gabarito-ans">{q.correct_answer?.toUpperCase()}</div>

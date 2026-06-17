@@ -78,7 +78,7 @@ export default function GenerateExam() {
                 <option value="">— Selecione o PDF —</option>
                 {pdfs.map(pdf => (
                   <option key={pdf.id} value={pdf.id}>
-                    {pdf.title} ({pdf.text_length?.toLocaleString()} chars)
+                    {pdf.title} ({pdf.num_pages > 0 ? `${pdf.num_pages} páginas` : `${pdf.text_length?.toLocaleString()} chars`})
                   </option>
                 ))}
               </select>

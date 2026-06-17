@@ -58,31 +58,39 @@ Retorne APENAS o JSON abaixo, sem texto adicional:
 
   const stream = await client.messages.stream({
     model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
-    max_tokens: 4000,
+    max_tokens: 16000,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const response = await stream.finalMessage();
 
-  // Extrair o bloco de texto da resposta
   const textBlock = response.content.find(b => b.type === 'text');
-  if (!textBlock) {
-    throw new Error('Claude não retornou texto na resposta');
-  }
+  if (!textBlock) throw new Error('Claude não retornou texto na resposta');
 
   const raw = textBlock.text.trim();
 
-  // Extrair JSON mesmo que venha com marcadores de código
-  const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('Resposta não contém JSON válido');
-  }
+  // Extrair bloco JSON — aceita com ou sem marcadores ```json
+  const jsonMatch = raw.match(/```json\s*([\s\S]*?)```/) ||
+                    raw.match(/```\s*([\s\S]*?)```/) ||
+                    raw.match(/(\{[\s\S]*\})/);
+  if (!jsonMatch) throw new Error('Resposta não contém JSON válido');
+
+  const jsonStr = (jsonMatch[1] || jsonMatch[0]).trim();
 
   let parsed;
   try {
-    parsed = JSON.parse(jsonMatch[0]);
+    parsed = JSON.parse(jsonStr);
   } catch {
-    throw new Error('JSON retornado pelo Claude é inválido');
+    // Tenta limpar caracteres de controle e tentar de novo
+    const cleaned = jsonStr
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+      .replace(/,\s*([}\]])/g, '$1'); // remove trailing commas
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e2) {
+      console.error('JSON inválido (primeiros 500 chars):', jsonStr.substring(0, 500));
+      throw new Error('JSON retornado pelo Claude é inválido. Tente gerar novamente.');
+    }
   }
 
   const questionsArray = Array.isArray(parsed)

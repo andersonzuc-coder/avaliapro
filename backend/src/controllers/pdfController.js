@@ -12,17 +12,20 @@ const uploadPdf = async (req, res, next) => {
     const { path: filePath, filename, originalname: originalName, size: fileSize } = req.file;
 
     let extractedText = '';
+    let numPages = 0;
     try {
-      extractedText = await extractTextFromPdf(filePath);
+      const result = await extractTextFromPdf(filePath);
+      extractedText = result.text;
+      numPages = result.numPages;
     } catch (err) {
       console.error('Erro ao extrair texto do PDF:', err.message);
     }
 
     const result = await query(
-      `INSERT INTO pdf_uploads (user_id, filename, original_name, file_path, extracted_text, file_size, title, description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO pdf_uploads (user_id, filename, original_name, file_path, extracted_text, file_size, title, description, num_pages)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [req.user.id, filename, originalName, filePath, extractedText, fileSize,
-       title || originalName.replace('.pdf', ''), description || '']
+       title || originalName.replace('.pdf', ''), description || '', numPages]
     );
 
     const [pdf] = await query('SELECT * FROM pdf_uploads WHERE id = ?', [result.insertId]);
@@ -38,7 +41,7 @@ const listPdfs = async (req, res, next) => {
   try {
     const pdfs = await query(
       `SELECT id, user_id, filename, original_name, file_size, title, description,
-              created_at, CHAR_LENGTH(extracted_text) AS text_length
+              created_at, CHAR_LENGTH(extracted_text) AS text_length, num_pages
        FROM pdf_uploads WHERE user_id = ? ORDER BY created_at DESC`,
       [req.user.id]
     );

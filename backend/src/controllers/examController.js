@@ -96,7 +96,8 @@ const listExams = async (req, res, next) => {
 
 const getExam = async (req, res, next) => {
   try {
-    const exam = await fetchExamById(req.params.id, req.user.id);
+    const isAdmin = req.user.role === 'admin';
+    const exam = await fetchExamById(req.params.id, req.user.id, isAdmin);
     if (!exam) return res.status(404).json({ error: 'Prova não encontrada' });
     res.json({ exam });
   } catch (error) {
@@ -139,13 +140,13 @@ const deleteExam = async (req, res, next) => {
   }
 };
 
-async function fetchExamById(examId, userId) {
+async function fetchExamById(examId, userId, isAdmin = false) {
   const exams = await query(
     `SELECT e.*, p.original_name AS pdf_name
      FROM exams e
      LEFT JOIN pdf_uploads p ON e.pdf_id = p.id
-     WHERE e.id = ? AND e.user_id = ?`,
-    [examId, userId]
+     WHERE e.id = ?${isAdmin ? '' : ' AND e.user_id = ?'}`,
+    isAdmin ? [examId] : [examId, userId]
   );
   if (exams.length === 0) return null;
   const exam = exams[0];

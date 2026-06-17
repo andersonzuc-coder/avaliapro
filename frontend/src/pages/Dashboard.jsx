@@ -36,18 +36,23 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
 
-  const loadData = useCallback(() => {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    Promise.all([
-      isAdmin ? api.get('/users/stats') : Promise.resolve(null),
-      api.get('/exams'),
-    ])
-      .then(([statsRes, examsRes]) => {
-        if (statsRes) setStats(statsRes.data.stats);
-        setRecentExams(examsRes.data.exams || []);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    try {
+      const examsRes = await api.get('/exams');
+      setRecentExams(examsRes.data.exams || []);
+    } catch (e) {
+      console.error('Erro ao carregar provas:', e);
+    }
+    if (isAdmin) {
+      try {
+        const statsRes = await api.get('/users/stats');
+        setStats(statsRes.data.stats);
+      } catch (e) {
+        console.error('Erro ao carregar stats:', e);
+      }
+    }
+    setLoading(false);
   }, [isAdmin]);
 
   useEffect(() => { loadData(); }, [loadData]);
