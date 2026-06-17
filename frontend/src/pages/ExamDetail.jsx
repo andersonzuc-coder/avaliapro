@@ -205,15 +205,17 @@ function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef, versionLabel })
         </div>
       </div>
 
-      {/* Instructions */}
-      {layout.instructions && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, padding: '8px 12px', marginBottom: 18, fontSize: 11 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Instruções:</div>
-          <div style={{ whiteSpace: 'pre-wrap', color: '#374151' }}>{layout.instructions}</div>
-        </div>
-      )}
+      {/* Instructions — capa (página 1) */}
+      <div style={{ pageBreakAfter: 'always', breakAfter: 'page' }}>
+        {layout.instructions && (
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 4, padding: '8px 12px', marginTop: 10, fontSize: 11 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Instruções:</div>
+            <div style={{ whiteSpace: 'pre-wrap', color: '#374151' }}>{layout.instructions}</div>
+          </div>
+        )}
+      </div>
 
-      {/* Questions */}
+      {/* Questions — a partir da página 2 */}
       {exam.questions.map(q => (
         <div key={q.id} style={{ marginBottom: 22, pageBreakInside: 'avoid' }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'flex-start' }}>
