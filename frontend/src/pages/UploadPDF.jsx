@@ -41,10 +41,13 @@ export default function UploadPDF() {
 
   const handleFile = file => {
     if (!file) return;
-    if (file.type !== 'application/pdf') { setError('Apenas arquivos PDF são aceitos.'); return; }
+    const ext = file.name.split('.').pop().toLowerCase();
+    const allowed = ['pdf', 'pptx', 'ppt'];
+    if (!allowed.includes(ext)) { setError('Apenas PDF ou PowerPoint (PPTX/PPT) são aceitos.'); return; }
+    if (ext === 'ppt') { setError('Formato .ppt antigo não é suportado. Salve o arquivo como .pptx e tente novamente.'); return; }
     setSelectedFile(file);
     setError('');
-    if (!form.title) setForm(f => ({ ...f, title: file.name.replace('.pdf', '') }));
+    if (!form.title) setForm(f => ({ ...f, title: file.name.replace(/\.(pdf|pptx|ppt)$/i, '') }));
   };
 
   const handleDrop = e => {
@@ -55,7 +58,7 @@ export default function UploadPDF() {
 
   const handleUpload = async e => {
     e.preventDefault();
-    if (!selectedFile) { setError('Selecione um arquivo PDF'); return; }
+    if (!selectedFile) { setError('Selecione um arquivo'); return; }
     setUploading(true);
     setError('');
     setSuccess('');
@@ -97,12 +100,12 @@ export default function UploadPDF() {
   return (
     <div className="page">
       <div className="page-header">
-        <h1 className="page-title">Materiais PDF</h1>
-        <p className="page-subtitle">Envie seus materiais de estudo para gerar provas automaticamente</p>
+        <h1 className="page-title">Materiais</h1>
+        <p className="page-subtitle">Envie PDFs ou apresentações PowerPoint (PPTX) para gerar provas automaticamente</p>
       </div>
 
       <div className="card" style={{ marginBottom: 24 }}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Enviar novo PDF</h2>
+        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Enviar novo material</h2>
 
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
@@ -122,11 +125,11 @@ export default function UploadPDF() {
             <div className="upload-text">
               {selectedFile
                 ? <><strong>{selectedFile.name}</strong><br /><small>{formatSize(selectedFile.size)}</small></>
-                : <><strong>Clique para selecionar</strong> ou arraste o PDF aqui</>
+                : <><strong>Clique para selecionar</strong> ou arraste o arquivo aqui</>
               }
             </div>
-            <div className="upload-hint">PDF • Máximo 20 MB</div>
-            <input ref={fileRef} type="file" accept=".pdf,application/pdf" style={{ display: 'none' }}
+            <div className="upload-hint">PDF ou PPTX • Máximo 50 MB</div>
+            <input ref={fileRef} type="file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" style={{ display: 'none' }}
               onChange={e => handleFile(e.target.files[0])} />
           </div>
 
@@ -142,14 +145,14 @@ export default function UploadPDF() {
           </div>
 
           <button type="submit" className="btn btn-primary" disabled={uploading || !selectedFile}>
-            {uploading ? 'Enviando e extraindo texto...' : 'Enviar PDF'}
+            {uploading ? 'Enviando e extraindo texto...' : 'Enviar material'}
           </button>
         </form>
       </div>
 
       <div className="card">
         <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>
-          Meus PDFs ({pdfs.length})
+          Meus materiais ({pdfs.length})
         </h2>
 
         {loading ? (
@@ -164,9 +167,9 @@ export default function UploadPDF() {
               <thead>
                 <tr>
                   <th>Título</th>
-                  <th>Arquivo</th>
+                  <th>Tipo</th>
                   <th>Tamanho</th>
-                  <th>Texto extraído</th>
+                  <th>Conteúdo extraído</th>
                   <th>Data</th>
                   <th></th>
                 </tr>
@@ -174,12 +177,24 @@ export default function UploadPDF() {
               <tbody>
                 {pdfs.map(pdf => (
                   <tr key={pdf.id}>
-                    <td><strong>{pdf.title}</strong></td>
-                    <td style={{ color: '#6b7280', fontSize: '.85rem' }}>{pdf.original_name}</td>
+                    <td>
+                      <strong>{pdf.title}</strong>
+                      <div style={{ fontSize: '.78rem', color: '#9ca3af' }}>{pdf.original_name}</div>
+                    </td>
+                    <td>
+                      <span className={`badge ${pdf.file_type === 'pptx' ? 'badge-yellow' : 'badge-green'}`} style={{ fontSize: 11 }}>
+                        {pdf.file_type === 'pptx' ? 'PPTX' : 'PDF'}
+                      </span>
+                    </td>
                     <td>{formatSize(pdf.file_size)}</td>
                     <td>
                       {pdf.text_length > 0
-                        ? <span className="badge badge-green">{pdf.text_length.toLocaleString()} chars</span>
+                        ? <span className="badge badge-green">
+                            {pdf.file_type === 'pptx'
+                              ? `${pdf.num_pages} slides`
+                              : `${pdf.num_pages > 0 ? `${pdf.num_pages} pág.` : `${pdf.text_length.toLocaleString()} chars`}`
+                            }
+                          </span>
                         : <span className="badge badge-red">Sem texto</span>
                       }
                     </td>

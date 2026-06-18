@@ -9,6 +9,7 @@ import GenerateExam from './pages/GenerateExam';
 import ExamDetail from './pages/ExamDetail';
 import CorrectExam from './pages/CorrectExam';
 import AdminPanel from './pages/AdminPanel';
+import Turmas from './pages/Turmas';
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
               <Route path="/pdfs" element={<UploadPDF />} />
               <Route path="/exams/generate" element={<GenerateExam />} />
               <Route path="/exams/:id" element={<ExamDetail />} />
+              <Route path="/turmas" element={<Turmas />} />
               <Route path="/correct" element={<CorrectExam />} />
               <Route path="/admin" element={<AdminPanel />} />
             </Route>

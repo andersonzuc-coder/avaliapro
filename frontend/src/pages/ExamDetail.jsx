@@ -150,7 +150,7 @@ function LayoutModal({ onClose }) {
 }
 
 /* ── PDF print template (off-screen) ── */
-function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef, versionLabel }) {
+function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef, versionLabel, studentName, studentMatricula }) {
   const inst = layout.institution || 'AvaliaPro';
 
   return (
@@ -189,11 +189,17 @@ function ExamPrintTemplate({ exam, layout, showGabarito, pdfRef, versionLabel })
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '4px 16px', fontSize: 11.5, marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Aluno(a):</span>
-            <span style={{ borderBottom: '1px solid #000', flex: 1, display: 'inline-block' }}></span>
+            {studentName
+              ? <span style={{ fontWeight: 600 }}>{studentName}</span>
+              : <span style={{ borderBottom: '1px solid #000', flex: 1, display: 'inline-block' }}></span>
+            }
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>Matrícula:</span>
-            <span style={{ borderBottom: '1px solid #000', flex: 1, display: 'inline-block' }}></span>
+            {studentMatricula
+              ? <span style={{ fontWeight: 600 }}>{studentMatricula}</span>
+              : <span style={{ borderBottom: '1px solid #000', flex: 1, display: 'inline-block' }}></span>
+            }
           </div>
         </div>
 
@@ -292,6 +298,7 @@ export default function ExamDetail() {
   const navigate = useNavigate();
   const pdfRef = useRef(null);
   const gabRef = useRef(null);
+  const studentPdfRef = useRef(null);
   const imgInputRef = useRef(null);
 
   const [exam, setExam] = useState(null);
@@ -303,6 +310,10 @@ export default function ExamDetail() {
   const [layout, setLayout] = useState(loadLayout);
   const [savingPdf, setSavingPdf] = useState(false);
   const [savingGab, setSavingGab] = useState(false);
+
+  // PDF por aluno
+  const [printStudent, setPrintStudent] = useState(null);
+  const [generatingStudentPdf, setGeneratingStudentPdf] = useState(false);
 
   // Versions (shuffled models)
   const [numVersions, setNumVersions] = useState(1);
@@ -322,6 +333,52 @@ export default function ExamDetail() {
       .catch(e => setError(e.response?.data?.error || 'Erro ao carregar prova'))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!printStudent || generatingStudentPdf) return;
+    const timer = setTimeout(() => handleStudentPdf(printStudent), 120);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [printStudent]);
+
+  const handleStudentPdf = async student => {
+    setGeneratingStudentPdf(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf()
+        .set({
+          margin: [8, 6, 14, 6],
+          filename: `${exam.title} - ${student.name}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        })
+        .from(studentPdfRef.current)
+        .toPdf()
+        .get('pdf')
+        .then(pdf => {
+          const total = pdf.internal.getNumberOfPages();
+          const W = pdf.internal.pageSize.getWidth();
+          const H = pdf.internal.pageSize.getHeight();
+          for (let i = 1; i <= total; i++) {
+            pdf.setPage(i);
+            pdf.setDrawColor(150, 150, 150);
+            pdf.setLineWidth(0.3);
+            pdf.line(6, H - 10, W - 6, H - 10);
+            pdf.setFontSize(8);
+            pdf.setTextColor(120, 120, 120);
+            pdf.text(`Página ${i} de ${total}`, W / 2, H - 6, { align: 'center' });
+          }
+        })
+        .save();
+    } catch (e) {
+      alert('Erro ao gerar PDF: ' + e.message);
+    } finally {
+      setGeneratingStudentPdf(false);
+      setPrintStudent(null);
+    }
+  };
 
   useEffect(() => {
     if (!exam?.questions?.length || numVersions <= 1) {
@@ -481,6 +538,8 @@ export default function ExamDetail() {
       <div style={{ overflow: 'hidden', height: 0, position: 'relative' }}>
         <ExamPrintTemplate exam={activeExam} layout={layout} pdfRef={pdfRef} versionLabel={versionLabel} />
         <GabaritoPrintTemplate exam={activeExam} layout={layout} gabRef={gabRef} versionLabel={versionLabel} />
+        <ExamPrintTemplate exam={activeExam} layout={layout} pdfRef={studentPdfRef}
+          studentName={printStudent?.name} studentMatricula={printStudent?.matricula} />
       </div>
 
       {/* Header — oculto na impressão */}
@@ -694,6 +753,52 @@ export default function ExamDetail() {
           ))}
         </div>
       </div>
+
+      {/* Provas por aluno */}
+      {exam.alunos?.length > 0 && (
+        <div className="card no-print" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600 }}>
+                Provas por aluno — {exam.turma_name}
+              </h2>
+              <p style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                {exam.alunos.length} aluno(s) • Clique em "Gerar PDF" para baixar a prova com o nome do aluno preenchido
+              </p>
+            </div>
+          </div>
+          {generatingStudentPdf && (
+            <div className="alert alert-info" style={{ marginBottom: 12 }}>
+              <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, flexShrink: 0 }} />
+              Gerando PDF de {printStudent?.name}...
+            </div>
+          )}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>#</th><th>Aluno</th><th>Matrícula</th><th></th></tr>
+              </thead>
+              <tbody>
+                {exam.alunos.map((aluno, i) => (
+                  <tr key={aluno.id}>
+                    <td style={{ color: '#9ca3af', fontSize: 13 }}>{i + 1}</td>
+                    <td><strong>{aluno.name}</strong></td>
+                    <td style={{ color: '#6b7280', fontSize: 13 }}>{aluno.matricula || '—'}</td>
+                    <td>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        disabled={generatingStudentPdf}
+                        onClick={() => setPrintStudent(aluno)}>
+                        Gerar PDF
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Correções */}
       {corrections.length > 0 && (

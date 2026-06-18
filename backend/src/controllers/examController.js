@@ -3,35 +3,50 @@ const { generateExamQuestions } = require('../services/openaiService');
 
 const generateExam = async (req, res, next) => {
   try {
-    const { pdfId, title, numQuestions = 10 } = req.body;
+    const { title, numQuestions = 10 } = req.body;
 
-    if (!pdfId || !title) {
-      return res.status(400).json({ error: 'PDF e título são obrigatórios' });
+    // Aceita pdfId (retrocompat) ou pdfIds (array)
+    let pdfIds = req.body.pdfIds;
+    if (!pdfIds) {
+      pdfIds = req.body.pdfId ? [req.body.pdfId] : [];
+    }
+    if (!Array.isArray(pdfIds)) pdfIds = [pdfIds];
+    pdfIds = pdfIds.map(Number).filter(Boolean);
+
+    if (!pdfIds.length || !title) {
+      return res.status(400).json({ error: 'Selecione ao menos um material e informe o título' });
     }
 
-    const pdfs = await query(
-      'SELECT * FROM pdf_uploads WHERE id = ? AND user_id = ?',
-      [pdfId, req.user.id]
+    // Buscar todos os materiais selecionados
+    const placeholders = pdfIds.map(() => '?').join(',');
+    const materials = await query(
+      `SELECT * FROM pdf_uploads WHERE id IN (${placeholders}) AND user_id = ?`,
+      [...pdfIds, req.user.id]
     );
-    if (pdfs.length === 0) {
-      return res.status(404).json({ error: 'PDF não encontrado' });
+    if (materials.length === 0) {
+      return res.status(404).json({ error: 'Nenhum material encontrado' });
     }
 
-    const pdf = pdfs[0];
-    const textContent = pdf.extracted_text || '';
+    // Concatenar textos de todos os materiais
+    const textContent = materials
+      .map(m => m.extracted_text || '')
+      .filter(t => t.trim().length > 0)
+      .join('\n\n---\n\n');
 
     if (textContent.trim().length < 100) {
       return res.status(400).json({
-        error: 'O PDF não contém texto suficiente para gerar questões. Verifique se o PDF contém texto selecionável (não é uma imagem escaneada).',
+        error: 'Os materiais selecionados não contêm texto suficiente. Verifique se os arquivos contêm texto extraível.',
       });
     }
 
     const { difficulty = 'mixed', instructions = '', codigo_prova = '', avaliacao = '', chamada = '' } = req.body;
+    const turmaId = req.body.turmaId ? parseInt(req.body.turmaId) : null;
+    const primaryPdfId = pdfIds[0];
 
     // Criar a prova no banco
     const examResult = await query(
-      'INSERT INTO exams (user_id, pdf_id, title, status, codigo_prova, avaliacao, chamada) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [req.user.id, pdfId, title.trim(), 'draft', codigo_prova.trim(), avaliacao.trim(), chamada.trim()]
+      'INSERT INTO exams (user_id, pdf_id, pdf_ids, title, status, codigo_prova, avaliacao, chamada, turma_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [req.user.id, primaryPdfId, JSON.stringify(pdfIds), title.trim(), 'draft', codigo_prova.trim(), avaliacao.trim(), chamada.trim(), turmaId]
     );
     const examId = examResult.insertId;
     let questions;
@@ -142,9 +157,10 @@ const deleteExam = async (req, res, next) => {
 
 async function fetchExamById(examId, userId, isAdmin = false) {
   const exams = await query(
-    `SELECT e.*, p.original_name AS pdf_name
+    `SELECT e.*, p.original_name AS pdf_name, t.name AS turma_name
      FROM exams e
      LEFT JOIN pdf_uploads p ON e.pdf_id = p.id
+     LEFT JOIN turmas t ON e.turma_id = t.id
      WHERE e.id = ?${isAdmin ? '' : ' AND e.user_id = ?'}`,
     isAdmin ? [examId] : [examId, userId]
   );
@@ -154,6 +170,14 @@ async function fetchExamById(examId, userId, isAdmin = false) {
     'SELECT * FROM questions WHERE exam_id = ? ORDER BY question_order',
     [examId]
   );
+  if (exam.turma_id) {
+    exam.alunos = await query(
+      'SELECT * FROM alunos WHERE turma_id = ? ORDER BY name',
+      [exam.turma_id]
+    );
+  } else {
+    exam.alunos = [];
+  }
   return exam;
 }
 

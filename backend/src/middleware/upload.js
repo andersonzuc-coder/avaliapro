@@ -26,10 +26,16 @@ const imageStorage = multer.diskStorage({
 });
 
 const pdfFilter = (req, file, cb) => {
-  if (file.mimetype === 'application/pdf') {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowedMimes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-powerpoint',
+  ];
+  if (allowedMimes.includes(file.mimetype) || ['.pdf', '.pptx', '.ppt'].includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Apenas arquivos PDF são permitidos'), false);
+    cb(new Error('Apenas PDF ou PowerPoint (PPTX/PPT) são permitidos'), false);
   }
 };
 
@@ -45,7 +51,7 @@ const imageFilter = (req, file, cb) => {
 const uploadPdf = multer({
   storage: pdfStorage,
   fileFilter: pdfFilter,
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 const questionImageStorage = multer.diskStorage({

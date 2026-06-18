@@ -143,4 +143,22 @@ function parseAnswers(text, numQuestions) {
   return answers;
 }
 
-module.exports = { correctExam, listCorrections, getCorrection };
+const deleteCorrection = async (req, res, next) => {
+  try {
+    const corrections = await query(
+      `SELECT c.id, c.image_path FROM exam_corrections c
+       JOIN exams e ON c.exam_id = e.id
+       WHERE c.id = ? AND e.user_id = ?`,
+      [req.params.id, req.user.id]
+    );
+    if (corrections.length === 0) return res.status(404).json({ error: 'Correção não encontrada' });
+    const c = corrections[0];
+    if (c.image_path && fs.existsSync(c.image_path)) fs.unlinkSync(c.image_path);
+    await query('DELETE FROM exam_corrections WHERE id = ?', [req.params.id]);
+    res.json({ message: 'Correção removida' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { correctExam, listCorrections, getCorrection, deleteCorrection };

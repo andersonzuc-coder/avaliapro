@@ -100,6 +100,24 @@ async function initDatabase() {
       FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+    CREATE TABLE IF NOT EXISTS turmas (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      user_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    CREATE TABLE IF NOT EXISTS alunos (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      turma_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      matricula VARCHAR(100) DEFAULT '',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (turma_id) REFERENCES turmas(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
     CREATE TABLE IF NOT EXISTS exam_corrections (
       id INT PRIMARY KEY AUTO_INCREMENT,
       exam_id INT NOT NULL,
@@ -124,6 +142,9 @@ async function initDatabase() {
     'ALTER TABLE exams ADD COLUMN avaliacao VARCHAR(50) NULL',
     'ALTER TABLE exams ADD COLUMN chamada VARCHAR(30) NULL',
     'ALTER TABLE pdf_uploads ADD COLUMN num_pages INT DEFAULT 0',
+    "ALTER TABLE pdf_uploads ADD COLUMN file_type VARCHAR(10) DEFAULT 'pdf'",
+    'ALTER TABLE exams ADD COLUMN pdf_ids JSON NULL',
+    'ALTER TABLE exams ADD COLUMN turma_id INT NULL',
   ];
   for (const sql of migrations) {
     try { await p.query(sql); } catch (e) { if (e.errno !== 1060) throw e; }

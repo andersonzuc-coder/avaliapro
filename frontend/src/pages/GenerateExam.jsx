@@ -2,10 +2,17 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
+const fileLabel = pdf => {
+  if (pdf.file_type === 'pptx') return `${pdf.num_pages > 0 ? `${pdf.num_pages} slides` : 'PPTX'}`;
+  return pdf.num_pages > 0 ? `${pdf.num_pages} págs.` : `${pdf.text_length?.toLocaleString()} chars`;
+};
+
 export default function GenerateExam() {
   const navigate = useNavigate();
   const [pdfs, setPdfs] = useState([]);
-  const [form, setForm] = useState({ pdfId: '', title: '', codigo_prova: '', avaliacao: '', chamada: '', numQuestions: 10, difficulty: 'mixed', instructions: '' });
+  const [turmas, setTurmas] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [form, setForm] = useState({ title: '', codigo_prova: '', avaliacao: '', chamada: '', numQuestions: 10, difficulty: 'mixed', instructions: '', turmaId: '' });
   const [loading, setLoading] = useState(false);
   const [loadingPdfs, setLoadingPdfs] = useState(true);
   const [error, setError] = useState('');
@@ -13,13 +20,20 @@ export default function GenerateExam() {
   useEffect(() => {
     api.get('/pdfs')
       .then(res => setPdfs(res.data.pdfs.filter(p => p.text_length > 0)))
-      .catch(() => setError('Erro ao carregar PDFs'))
+      .catch(() => setError('Erro ao carregar materiais'))
       .finally(() => setLoadingPdfs(false));
+    api.get('/turmas')
+      .then(res => setTurmas(res.data.turmas))
+      .catch(() => {});
   }, []);
+
+  const toggleId = id => setSelectedIds(prev =>
+    prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+  );
 
   const handleSubmit = async e => {
     e.preventDefault();
-    if (!form.pdfId) { setError('Selecione um PDF'); return; }
+    if (!selectedIds.length) { setError('Selecione ao menos um material'); return; }
     if (!form.title.trim()) { setError('Informe a disciplina'); return; }
 
     setLoading(true);
@@ -27,7 +41,7 @@ export default function GenerateExam() {
 
     try {
       const res = await api.post('/exams/generate', {
-        pdfId: parseInt(form.pdfId),
+        pdfIds: selectedIds,
         title: form.title.trim(),
         codigo_prova: form.codigo_prova.trim(),
         avaliacao: form.avaliacao,
@@ -35,6 +49,7 @@ export default function GenerateExam() {
         numQuestions: parseInt(form.numQuestions),
         difficulty: form.difficulty,
         instructions: form.instructions.trim(),
+        turmaId: form.turmaId || null,
       });
       navigate(`/exams/${res.data.exam.id}`);
     } catch (err) {
@@ -65,25 +80,53 @@ export default function GenerateExam() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label">Material de base (PDF)</label>
+            <label className="form-label">
+              Material de base
+              {selectedIds.length > 0 && (
+                <span style={{ marginLeft: 8, background: '#1e293b', color: '#fff', borderRadius: 10, padding: '1px 8px', fontSize: 12, fontWeight: 600 }}>
+                  {selectedIds.length} selecionado{selectedIds.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </label>
             {loadingPdfs ? (
               <div className="spinner-wrap" style={{ padding: 20 }}><div className="spinner" /></div>
             ) : pdfs.length === 0 ? (
               <div className="alert alert-warning">
-                Nenhum PDF com texto disponível. <a href="/pdfs">Envie um PDF primeiro.</a>
+                Nenhum material com texto disponível. <a href="/pdfs">Envie um material primeiro.</a>
               </div>
             ) : (
-              <select className="form-select" value={form.pdfId} required
-                onChange={e => setForm(f => ({ ...f, pdfId: e.target.value }))}>
-                <option value="">— Selecione o PDF —</option>
-                {pdfs.map(pdf => (
-                  <option key={pdf.id} value={pdf.id}>
-                    {pdf.title} ({pdf.num_pages > 0 ? `${pdf.num_pages} páginas` : `${pdf.text_length?.toLocaleString()} chars`})
-                  </option>
-                ))}
-              </select>
+              <div style={{ border: '1px solid var(--gray-200)', borderRadius: 8, overflow: 'hidden' }}>
+                {pdfs.map((pdf, idx) => {
+                  const checked = selectedIds.includes(pdf.id);
+                  return (
+                    <label key={pdf.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer',
+                      background: checked ? '#f0f9ff' : idx % 2 === 0 ? '#fff' : '#fafafa',
+                      borderBottom: idx < pdfs.length - 1 ? '1px solid var(--gray-100)' : 'none',
+                      transition: 'background .1s',
+                    }}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleId(pdf.id)}
+                        style={{ width: 16, height: 16, accentColor: '#1e293b', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13.5, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pdf.title}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#6b7280' }}>{pdf.original_name}</div>
+                      </div>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
+                        background: pdf.file_type === 'pptx' ? '#fef3c7' : '#dcfce7',
+                        color: pdf.file_type === 'pptx' ? '#92400e' : '#166534',
+                        flexShrink: 0,
+                      }}>
+                        {pdf.file_type === 'pptx' ? 'PPTX' : 'PDF'} · {fileLabel(pdf)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
-            <p className="form-hint">Apenas PDFs com texto extraído aparecem na lista.</p>
+            <p className="form-hint">Selecione um ou mais materiais. Os conteúdos serão combinados para gerar as questões.</p>
           </div>
 
           <div className="form-group">
@@ -122,6 +165,24 @@ export default function GenerateExam() {
               </select>
             </div>
           </div>
+
+          {turmas.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">
+                Turma <span style={{ color: 'var(--gray-400)', fontWeight: 400 }}>(opcional — gera prova com nome do aluno)</span>
+              </label>
+              <select className="form-select" value={form.turmaId}
+                onChange={e => setForm(f => ({ ...f, turmaId: e.target.value }))}>
+                <option value="">— Sem turma vinculada —</option>
+                {turmas.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.total_alunos} aluno{t.total_alunos !== 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+              <p className="form-hint">Se selecionada, na tela da prova você poderá gerar um PDF individual para cada aluno da turma.</p>
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Número de questões</label>
@@ -162,7 +223,7 @@ export default function GenerateExam() {
           </div>
 
           <button type="submit" className="btn btn-primary btn-lg btn-full"
-            disabled={loading || pdfs.length === 0}>
+            disabled={loading || pdfs.length === 0 || selectedIds.length === 0}>
             {loading ? 'Gerando...' : 'Gerar Prova'}
           </button>
         </form>

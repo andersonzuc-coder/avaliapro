@@ -11,6 +11,7 @@ const pdfRoutes = require('./src/routes/pdfs');
 const examRoutes = require('./src/routes/exams');
 const correctionRoutes = require('./src/routes/corrections');
 const userRoutes = require('./src/routes/users');
+const turmaRoutes = require('./src/routes/turmas');
 const errorHandler = require('./src/middleware/errorHandler');
 const { initDatabase } = require('./src/config/database');
 
@@ -49,6 +50,7 @@ app.use('/api/pdfs', pdfRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/corrections', correctionRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/turmas', turmaRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
